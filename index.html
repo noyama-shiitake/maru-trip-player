@@ -11,6 +11,10 @@
   header{padding:8px 12px;background:#fff8ec;border-bottom:1px solid #e5d9c3}
   header h1{font-size:16px;margin:0 0 2px}
   header .quest{font-size:12px;color:#777}
+  #tiletoggle{display:flex;gap:6px;margin-top:6px}
+  #tiletoggle button{border:1px solid #d8cdb4;background:#fffdf6;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer}
+  #tiletoggle button.active{background:#5b8c5a;border-color:#5b8c5a;color:#fff;font-weight:700}
+  #livebar{display:none;background:#fdecea;border:1px solid #f2b8b5;color:#a33;border-radius:8px;padding:6px 10px;font-size:13px;margin:6px 0}
   #days{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:#fff;border-bottom:1px solid #eee}
   #days button{flex:0 0 auto;border:1px solid #d8cdb4;background:#fffdf6;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
   #days button.active{background:#f0b429;border-color:#f0b429;color:#fff;font-weight:700}
@@ -47,6 +51,10 @@
   <header>
     <h1>🐾 まるの旅</h1>
     <div class="quest" id="quest">読み込み中…</div>
+    <div id="tiletoggle">
+      <button id="tile-std" class="active">標準地図</button>
+      <button id="tile-photo">航空写真</button>
+    </div>
   </header>
   <nav id="days"></nav>
   <div id="map"></div>
@@ -57,6 +65,7 @@
       <p id="route"></p>
       <div class="chips" id="chips"></div>
       <p id="account"></p>
+      <div id="livebar">🔴 今日の旅：いまの時刻に合わせて表示しています（当日は早送りできません）</div>
       <div id="controls">
         <button id="play" title="再生／停止">▶</button>
         <div id="clock">--:--</div>
@@ -82,12 +91,36 @@ const SAVE_URL = "https://gist.githubusercontent.com/noyama-shiitake/66671c83ac1
 const PHOTO_BASE = "photos/";
 
 const map = L.map("map", {zoomControl:true}).setView([34.68, 135.52], 7);
-L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+const stdLayer = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
   attribution: "地図：地理院タイル（国土地理院）", maxZoom: 18
-}).addTo(map);
+});
+const photoLayer = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", {
+  attribution: "航空写真：地理院タイル（全国最新写真・国土地理院）", maxZoom: 18
+});
+stdLayer.addTo(map);
+function setTile(which){
+  if (which === "photo"){ map.removeLayer(stdLayer); photoLayer.addTo(map); }
+  else { map.removeLayer(photoLayer); stdLayer.addTo(map); }
+  document.getElementById("tile-std").classList.toggle("active", which !== "photo");
+  document.getElementById("tile-photo").classList.toggle("active", which === "photo");
+}
+document.getElementById("tile-std").onclick = () => setTile("std");
+document.getElementById("tile-photo").onclick = () => setTile("photo");
 
 let SAVE = null, day = null, elapsed = 0, playing = false, lastTs = null;
 let routeLine = null, doneLine = null, pin = null, stopMarkers = [];
+let liveMode = false, liveTimer = null;
+
+function todayStr(){
+  const n = new Date();
+  return n.getFullYear() + "-" + String(n.getMonth()+1).padStart(2,"0") + "-" + String(n.getDate()).padStart(2,"0");
+}
+function liveElapsed(d){
+  const [h, m] = d.startTime.split(":").map(Number);
+  const n = new Date();
+  const now = n.getHours()*60 + n.getMinutes() + n.getSeconds()/60;
+  return Math.max(0, Math.min(d.totalMinutes, now - (h*60 + m)));
+}
 
 const $ = id => document.getElementById(id);
 const maruIcon = L.divIcon({className:"", html:'<div class="maru-pin">🐾</div>', iconSize:[30,30], iconAnchor:[15,15]});
@@ -180,6 +213,15 @@ function selectDay(idx, fit=true){
   day.stops = prepare(day);
   elapsed = 0; playing = false; lastTs = null;
   $("play").textContent = "▶";
+  // On the day itself the position follows the real clock: no fast-forward, no seek.
+  liveMode = (day.date === todayStr());
+  if (liveTimer){ clearInterval(liveTimer); liveTimer = null; }
+  $("controls").style.display = liveMode ? "none" : "flex";
+  $("livebar").style.display = liveMode ? "block" : "none";
+  if (liveMode){
+    elapsed = liveElapsed(day);
+    liveTimer = setInterval(() => { if (day && liveMode){ elapsed = liveElapsed(day); render(); } }, 15000);
+  }
   document.querySelectorAll("#days button").forEach((b,i)=>b.classList.toggle("active", i===idx));
   $("loading").style.display = "none";
   $("dayview").style.display = "block";
@@ -191,6 +233,8 @@ function selectDay(idx, fit=true){
     c.className = "chip" + (pf.result === "gourmet-only" ? " gourmet" : "");
     c.textContent = pf.result === "goods"
       ? ("#" + pf.order + " " + pf.name + "： " + (pf.chiikawa || ""))
+      : pf.result === "planned"
+      ? ("#" + pf.order + " " + pf.name + "： 予定" + (pf.chiikawa ? "（" + pf.chiikawa + "を探す）" : ""))
       : ("#" + pf.order + " " + pf.name + "： グルメのみ（" + (pf.gourmet ? pf.gourmet.dish : "") + "）");
     $("chips").appendChild(c);
   });
@@ -210,7 +254,7 @@ function selectDay(idx, fit=true){
       $("overlay-cap").textContent = ph.place + "（" + ph.prefecture + "）";
       $("overlay").style.display = "flex";
       const target = day.stops.find(s => s.stop && (s.name.includes(ph.place) || ph.place.includes(s.name)));
-      if (target){ elapsed = target._t; playing = false; $("play").textContent = "▶"; render(); }
+      if (target && !liveMode){ elapsed = target._t; playing = false; $("play").textContent = "▶"; render(); }
     };
     $("photos").appendChild(fig);
   });
@@ -223,7 +267,7 @@ function selectDay(idx, fit=true){
   day.stops.filter(s=>s.stop).forEach(s => {
     const m = L.circleMarker([s.lat, s.lng], {radius:5, color:"#b3541e", fillColor:"#fff", fillOpacity:1, weight:2})
       .addTo(map).bindTooltip(s.name + (s.time ? " " + s.time : ""));
-    m.on("click", () => { elapsed = s._t; playing = false; $("play").textContent = "▶"; render(); });
+    m.on("click", () => { if (liveMode) return; elapsed = s._t; playing = false; $("play").textContent = "▶"; render(); });
     stopMarkers.push(m);
   });
   if (!pin) pin = L.marker(latlngs[0], {icon: maruIcon, zIndexOffset: 1000}).addTo(map);
@@ -262,11 +306,13 @@ fetch(SAVE_URL).then(r => r.json()).then(data => {
   data.days.forEach((d, i) => {
     const b = document.createElement("button");
     b.innerHTML = d.date.slice(5).replace("-", "/") + " " + (d.prefectures && d.prefectures[0] ? d.prefectures[0].name : "") +
+      (d.date === todayStr() ? '<span class="planned">今日</span>' : "") +
       (d.status === "planned" ? '<span class="planned">予定</span>' : "");
     b.onclick = () => selectDay(i);
     nav.appendChild(b);
   });
-  selectDay(data.days.length - 1);
+  const ti = data.days.findIndex(d => d.date === todayStr());
+  selectDay(ti >= 0 ? ti : data.days.length - 1);
 }).catch(e => { $("loading").textContent = "セーブデータを読み込めませんでした：" + e; });
 </script>
 </body>
