@@ -351,7 +351,6 @@ html,body{background:#0D4F72}#map{background:#0D4F72}.leaflet-container{backgrou
       <button type="button" class="btn" id="followBtn" aria-pressed="false">カメラ追従：オフ</button>
       <button type="button" class="btn live-return" id="liveReturnBtn">まるの現在地に戻る</button>
       <button type="button" class="btn" id="fitBtn">全体を表示</button>
-      <button type="button" class="btn" id="osakaBtn">大阪上本町を見る</button>
       <button type="button" class="btn" id="routeBtn">全行程ルート</button>
     </div>
     <div class="panel" id="trainPanel"></div>
@@ -740,7 +739,6 @@ function setFollow(v){
 }
 $("followBtn").addEventListener("click", function(){ setFollow(!follow); if(follow) renderPin(); });
 $("fitBtn").addEventListener("click", function(){ setFollow(false); if(day) map.fitBounds(routeLine.getBounds(), {padding:[30,30]}); });
-$("osakaBtn").addEventListener("click", function(){ setFollow(false); map.setView([HOME.lat, HOME.lng], 14, {animate:true}); });
 $("liveReturnBtn").addEventListener("click", function(){
   var t = todayKey(), has = DATA.days.some(function(d){ return d.date===t; });
   var target = has? t : DATA.days[DATA.days.length-1].date;
