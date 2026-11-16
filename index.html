@@ -8,7 +8,10 @@
 <style>
   html,body{margin:0;padding:0;height:100%;font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;background:#f7f4ec;color:#333}
   #app{display:flex;flex-direction:column;height:100dvh}
-  header{padding:8px 12px;background:#fff8ec;border-bottom:1px solid #e5d9c3}
+  header{padding:8px 12px;background:#fff8ec;border-bottom:1px solid #e5d9c3;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .headbtns{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+  .headbtns button{border:1px solid #d8cdb4;background:#fffdf6;border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .headbtns button.active{background:#5b8c5a;border-color:#5b8c5a;color:#fff;font-weight:700}
   header h1{font-size:16px;margin:0 0 2px}
   header .quest{font-size:12px;color:#777}
   #tiletoggle{display:flex;gap:6px;margin-top:6px}
@@ -46,11 +49,17 @@
 <body>
 <div id="app">
   <header>
-    <h1>🐾 まるの旅</h1>
-    <div class="quest" id="quest">読み込み中…</div>
-    <div id="tiletoggle">
-      <button id="tile-std" class="active">標準地図</button>
-      <button id="tile-photo">航空写真</button>
+    <div>
+      <h1>🐾 まるの旅</h1>
+      <div class="quest" id="quest">読み込み中…</div>
+      <div id="tiletoggle">
+        <button id="tile-std" class="active">標準地図</button>
+        <button id="tile-photo">航空写真</button>
+      </div>
+    </div>
+    <div class="headbtns">
+      <button id="reload">🔄 リロード</button>
+      <button id="follow">📍 追従</button>
     </div>
   </header>
   <nav id="days"><select id="daysel" aria-label="日を選ぶ"></select></nav>
@@ -106,7 +115,7 @@ document.getElementById("tile-photo").onclick = () => setTile("photo");
 
 let SAVE = null, day = null, elapsed = 0, playing = false, lastTs = null;
 let routeLine = null, doneLine = null, pin = null, stopMarkers = [];
-let liveMode = false, liveTimer = null;
+let liveMode = false, liveTimer = null, following = false;
 
 function todayStr(){
   const n = new Date();
@@ -193,6 +202,7 @@ function render(){
   const st = day.stops;
   const p = posAt(st, elapsed);
   pin.setLatLng(p);
+  if (following) map.setView(p, map.getZoom(), {animate: false});
   const upto = st.filter(s => s._t <= elapsed).map(s => [s.lat, s.lng]);
   upto.push(p);
   doneLine.setLatLngs(upto);
@@ -297,24 +307,36 @@ $("play").onclick = () => {
 $("seek").oninput = e => { elapsed = Number(e.target.value); playing = false; $("play").textContent = "▶"; render(); };
 $("overlay").onclick = () => $("overlay").style.display = "none";
 
-fetch(SAVE_URL).then(r => r.json()).then(data => {
-  SAVE = data;
-  const q = data.quest || {};
-  $("quest").textContent = "全国制覇 " + (q.collected ?? "?") + "/" + (q.totalPrefectures ?? 47) +
-    "県（グッズ " + (q.goodsCollected ?? "?") + "県・グルメのみ " + (q.gourmetOnly ?? "?") + "県）　更新：" +
-    (data.updatedAt || "").slice(0,10);
-  const sel = $("daysel");
-  data.days.forEach((d, i) => {
-    const o = document.createElement("option");
-    o.value = i;
-    o.textContent = d.date.replace(/-/g, "/") + " " + (d.prefectures && d.prefectures[0] ? d.prefectures[0].name : "") +
-      (d.date === todayStr() ? "（今日）" : "") + (d.status === "planned" ? "（予定）" : "");
-    sel.appendChild(o);
-  });
-  sel.onchange = () => selectDay(Number(sel.value));
-  const ti = data.days.findIndex(d => d.date === todayStr());
-  selectDay(ti >= 0 ? ti : data.days.length - 1);
-}).catch(e => { $("loading").textContent = "セーブデータを読み込めませんでした：" + e; });
+function loadData(keepDate){
+  fetch(SAVE_URL, {cache: "no-store"}).then(r => r.json()).then(data => {
+    SAVE = data;
+    const q = data.quest || {};
+    $("quest").textContent = "全国制覇 " + (q.collected ?? "?") + "/" + (q.totalPrefectures ?? 47) +
+      "県（グッズ " + (q.goodsCollected ?? "?") + "県・グルメのみ " + (q.gourmetOnly ?? "?") + "県）　更新：" +
+      (data.updatedAt || "").slice(0,10);
+    const sel = $("daysel");
+    sel.innerHTML = "";
+    data.days.forEach((d, i) => {
+      const o = document.createElement("option");
+      o.value = i;
+      o.textContent = d.date.replace(/-/g, "/") + " " + (d.prefectures && d.prefectures[0] ? d.prefectures[0].name : "") +
+        (d.date === todayStr() ? "（今日）" : "") + (d.status === "planned" ? "（予定）" : "");
+      sel.appendChild(o);
+    });
+    sel.onchange = () => selectDay(Number(sel.value));
+    let idx = keepDate ? data.days.findIndex(d => d.date === keepDate) : -1;
+    if (idx < 0) idx = data.days.findIndex(d => d.date === todayStr());
+    if (idx < 0) idx = data.days.length - 1;
+    selectDay(idx);
+  }).catch(e => { $("loading").textContent = "セーブデータを読み込めませんでした：" + e; });
+}
+loadData(null);
+$("reload").onclick = () => loadData(day ? day.date : null);
+$("follow").onclick = () => {
+  following = !following;
+  $("follow").classList.toggle("active", following);
+  if (following) render();
+};
 </script>
 </body>
 </html>
