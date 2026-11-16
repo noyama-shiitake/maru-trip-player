@@ -15,11 +15,8 @@
   #tiletoggle button{border:1px solid #d8cdb4;background:#fffdf6;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer}
   #tiletoggle button.active{background:#5b8c5a;border-color:#5b8c5a;color:#fff;font-weight:700}
   #livebar{display:none;background:#fdecea;border:1px solid #f2b8b5;color:#a33;border-radius:8px;padding:6px 10px;font-size:13px;margin:6px 0}
-  #days{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:#fff;border-bottom:1px solid #eee}
-  #days button{flex:0 0 auto;border:1px solid #d8cdb4;background:#fffdf6;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
-  #days button.active{background:#f0b429;border-color:#f0b429;color:#fff;font-weight:700}
-  #days button .planned{font-size:10px;color:#b3541e;margin-left:4px}
-  #days button.active .planned{color:#fff}
+  #days{padding:8px 12px;background:#fff;border-bottom:1px solid #eee}
+  #daysel{width:100%;height:42px;font-size:15px;border:1px solid #d8cdb4;border-radius:8px;background:#fffdf6;padding:0 8px;color:#333}
   #map{flex:1;min-height:200px}
   #panel{background:#fff;border-top:1px solid #e5d9c3;padding:10px 12px;max-height:46dvh;overflow-y:auto}
   #daytitle{font-size:15px;font-weight:700;margin:0 0 2px}
@@ -56,7 +53,7 @@
       <button id="tile-photo">航空写真</button>
     </div>
   </header>
-  <nav id="days"></nav>
+  <nav id="days"><select id="daysel" aria-label="日を選ぶ"></select></nav>
   <div id="map"></div>
   <section id="panel">
     <div id="loading">セーブデータを読み込んでいます…</div>
@@ -222,7 +219,7 @@ function selectDay(idx, fit=true){
     elapsed = liveElapsed(day);
     liveTimer = setInterval(() => { if (day && liveMode){ elapsed = liveElapsed(day); render(); } }, 15000);
   }
-  document.querySelectorAll("#days button").forEach((b,i)=>b.classList.toggle("active", i===idx));
+  $("daysel").value = String(idx);
   $("loading").style.display = "none";
   $("dayview").style.display = "block";
   $("daytitle").textContent = day.date + "　" + day.title + (day.status === "planned" ? "（予定）" : "");
@@ -306,15 +303,15 @@ fetch(SAVE_URL).then(r => r.json()).then(data => {
   $("quest").textContent = "全国制覇 " + (q.collected ?? "?") + "/" + (q.totalPrefectures ?? 47) +
     "県（グッズ " + (q.goodsCollected ?? "?") + "県・グルメのみ " + (q.gourmetOnly ?? "?") + "県）　更新：" +
     (data.updatedAt || "").slice(0,10);
-  const nav = $("days");
+  const sel = $("daysel");
   data.days.forEach((d, i) => {
-    const b = document.createElement("button");
-    b.innerHTML = d.date.slice(5).replace("-", "/") + " " + (d.prefectures && d.prefectures[0] ? d.prefectures[0].name : "") +
-      (d.date === todayStr() ? '<span class="planned">今日</span>' : "") +
-      (d.status === "planned" ? '<span class="planned">予定</span>' : "");
-    b.onclick = () => selectDay(i);
-    nav.appendChild(b);
+    const o = document.createElement("option");
+    o.value = i;
+    o.textContent = d.date.replace(/-/g, "/") + " " + (d.prefectures && d.prefectures[0] ? d.prefectures[0].name : "") +
+      (d.date === todayStr() ? "（今日）" : "") + (d.status === "planned" ? "（予定）" : "");
+    sel.appendChild(o);
   });
+  sel.onchange = () => selectDay(Number(sel.value));
   const ti = data.days.findIndex(d => d.date === todayStr());
   selectDay(ti >= 0 ? ti : data.days.length - 1);
 }).catch(e => { $("loading").textContent = "セーブデータを読み込めませんでした：" + e; });
