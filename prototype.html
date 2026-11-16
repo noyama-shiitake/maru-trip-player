@@ -283,6 +283,9 @@
 .live-note{display:inline-block;padding:3px 10px;border-radius:999px;background:#fdeceb;color:#9e2b25;font-weight:700;font-size:12.5px}
 .compact-toggle{display:block;width:100%;margin-top:8px;padding:7px 10px;border:1.5px solid var(--panel-border);border-radius:11px;background:#fff;color:var(--muted);font-size:12.5px;cursor:pointer}
 .sta .lb{background:rgba(255,255,255,.92);border:1px solid #dde3e8;border-radius:999px;padding:1px 7px;font-size:11px;font-weight:600;color:#1d2530;white-space:nowrap;margin-left:5px}
+#routeBanner{max-width:94vw;box-sizing:border-box;display:flex;align-items:center;gap:10px}
+#routeBannerText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#routeExit{flex:none}
 .tour-ledger-row{padding:8px 0;border-top:1px solid var(--panel-border);font-size:13px;line-height:1.55}
 .tour-ledger-row .n{color:var(--muted);font-size:12px;margin-top:2px}
 .lb{position:fixed;inset:0;z-index:2000;background:rgba(10,14,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -421,8 +424,9 @@ map.on("zoomend moveend", function(){ interacting = false; renderPin(); });
 
 function jstNow(){ var n = new Date(); return new Date(n.getTime() + (540 + n.getTimezoneOffset())*60000); }
 function todayKey(){ var j = jstNow(); return j.getFullYear()+"-"+String(j.getMonth()+1).padStart(2,"0")+"-"+String(j.getDate()).padStart(2,"0"); }
-function hav(a, b){ var R=6371, r=Math.PI/180, dLa=(b[0]-a[0])*r, dLo=(b[1]-a[1])*r; var s=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLo/2)*Math.sin(dLo/2); return 2*R*Math.asin(Math.sqrt(s)); }
+function hav(la1, lo1, la2, lo2){ var R=6371, r=Math.PI/180, dLa=(la2-la1)*r, dLo=(lo2-lo1)*r; var s=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)*Math.sin(dLo/2); return 2*R*Math.asin(Math.sqrt(s)); }
 function fmtClock(min){ var t = day.startTime.split(":"); var base = (+t[0])*60 + (+t[1]) + Math.round(min); return String(Math.floor(base/60)).padStart(2,"0")+":"+String(base%60).padStart(2,"0"); }
+function fmtD(iso, short){ var p = iso.split("-"); return short? (+p[1])+"月"+(+p[2])+"日" : p[0]+"年"+(+p[1])+"月"+(+p[2])+"日"; }
 function fmtElapsed(min){ var s = Math.max(0, Math.floor(min*60)); var h = Math.floor(s/3600), m = Math.floor((s%3600)/60), ss = s%60; return h+":"+String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0"); }
 function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
 
@@ -433,13 +437,13 @@ function computeTimes(){
   for(var i=0;i<n;i++) if(stationMin[i]!=null) anchors.push(i);
   for(var k=0;k<anchors.length-1;k++){
     var a=anchors[k], b=anchors[k+1], segD=0, j, ds=[0];
-    for(j=a;j<b;j++){ segD += hav(st[j], st[j+1]); ds.push(segD); }
+    for(j=a;j<b;j++){ segD += hav(st[j][1], st[j][2], st[j+1][1], st[j+1][2]); ds.push(segD); }
     for(j=a+1;j<b;j++) stationMin[j] = stationMin[a] + (stationMin[b]-stationMin[a]) * (segD? ds[j-a]/segD : 0);
   }
   if(anchors.length && anchors[0]>0) for(var i2=0;i2<anchors[0];i2++) stationMin[i2]=stationMin[anchors[0]];
   if(anchors.length && anchors[anchors.length-1]<n-1) for(var i3=anchors[anchors.length-1]+1;i3<n;i3++) stationMin[i3]=stationMin[anchors[anchors.length-1]];
   cumDist=[0];
-  for(var i4=1;i4<n;i4++) cumDist.push(cumDist[i4-1]+hav(st[i4-1], st[i4]));
+  for(var i4=1;i4<n;i4++) cumDist.push(cumDist[i4-1]+hav(st[i4-1][1], st[i4-1][2], st[i4][1], st[i4][2]));
   totalDist = cumDist[n-1];
 }
 function posAt(m){
@@ -452,7 +456,7 @@ function posAt(m){
       if(a[1]===b[1] && a[2]===b[2]) return {lat:a[1], lng:a[2], seg:i, dist:cumDist[i], dwell:true};
       var f = (stationMin[i+1]>stationMin[i]) ? (m-stationMin[i])/(stationMin[i+1]-stationMin[i]) : 0;
       var lat=a[1]+(b[1]-a[1])*f, lng=a[2]+(b[2]-a[2])*f;
-      return {lat:lat, lng:lng, seg:i, dist:cumDist[i]+hav(a,[lat,lng]), dwell:false};
+      return {lat:lat, lng:lng, seg:i, dist:cumDist[i]+hav(a[1], a[2], lat, lng), dwell:false};
     }
   }
   return {lat:st[n-1][1], lng:st[n-1][2], seg:n-2, dist:totalDist, dwell:false};
@@ -667,7 +671,7 @@ function buildAlbum(){
   var lastDate = DATA.days.filter(function(d){ return d.photos && d.photos.length; }).pop();
   var firstDate = DATA.days.filter(function(d){ return d.photos && d.photos.length; })[0];
   var h = '<div class="pp-inner"><p class="pp-lead">まるの<strong>全国ご当地ちいかわ収集の旅</strong>で撮った自撮り集です。駅に着いたとき、ホテルの前、楽しかった場所で撮った写真を、日付ごとにまとめています。</p>';
-  h += '<div class="pp-stats" aria-label="アルバムの概要"><span class="pp-stat">📸 '+total+'枚 <span>の写真</span></span><span class="pp-stat">🗓️ '+dayCount+'日間 <span>'+(firstDate? firstDate.date.replace(/-/g,"年").replace(/年(\d+)月/,"年$1月") : '')+'〜'+(lastDate? lastDate.date.slice(5).replace("-","月")+"日" : '')+'</span></span><span class="pp-stat">🗾 '+q.collected+' / '+q.totalPrefectures+'県 <span>到達</span></span></div>';
+  h += '<div class="pp-stats" aria-label="アルバムの概要"><span class="pp-stat">📸 '+total+'枚 <span>の写真</span></span><span class="pp-stat">🗓️ '+dayCount+'日間 <span>'+(firstDate? fmtD(firstDate.date) : '')+'〜'+(lastDate? fmtD(lastDate.date, true) : '')+'</span></span><span class="pp-stat">🗾 '+q.collected+' / '+q.totalPrefectures+'県 <span>到達</span></span></div>';
   h += '<div class="pp-progress" aria-label="収集の進み具合"><div class="pp-progress-head"><b>ご当地収集の旅　'+q.collected+' / '+q.totalPrefectures+'県</b> <small>ご当地ちいかわ入手 '+q.goodsCollected+'県 ＋ グルメのみ '+q.gourmetOnly+'県</small></div>' +
     '<div class="pp-bar" role="progressbar" aria-valuenow="'+q.collected+'" aria-valuemin="0" aria-valuemax="'+q.totalPrefectures+'"><i style="width:'+Math.round(q.collected/q.totalPrefectures*100)+'%"></i></div>' +
     '<p class="pp-pref-list">'+names.join(" ・ ")+'</p></div>';
@@ -790,7 +794,7 @@ var svMode = "here";
 function svEmbed(lat, lng){ return "https://www.google.com/maps?q=&layer=c&cbll="+lat+","+lng+"&cbp=11,0,0,0,0&output=svembed"; }
 function nearestOnRoute(pts, p){
   var best=null, bd=1e9;
-  for(var i=0;i<pts.length;i++){ var d=hav(pts[i],[p.lat,p.lng]); if(d<bd){ bd=d; best=pts[i]; } }
+  for(var i=0;i<pts.length;i++){ var d=hav(pts[i][0], pts[i][1], p.lat, p.lng); if(d<bd){ bd=d; best=pts[i]; } }
   return best;
 }
 function openSv(){ if(!day || !curPos) return; $("svPanel").hidden = false; updateSv(); }
