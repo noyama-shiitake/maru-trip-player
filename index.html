@@ -62,8 +62,8 @@
   #routeBanner[hidden]{display:none}
   #routeBanner .rb-off{flex:none;background:var(--panel);color:var(--ink);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:700;line-height:1.3}
   /* ---------- album panel ---------- */
-  #photoPanel{position:fixed;inset:0;z-index:850;background:var(--panel);color:var(--ink);display:flex;flex-direction:column;overscroll-behavior:contain}
-  #photoPanel[hidden]{display:none}
+  #albumPanel{position:fixed;inset:0;z-index:850;background:var(--panel);color:var(--ink);display:flex;flex-direction:column;overscroll-behavior:contain}
+  #albumPanel[hidden]{display:none}
   .pp-head{flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;border-bottom:1px solid var(--panel-border);background:var(--panel)}
   .pp-title{flex:1;font-size:19px;font-weight:700;line-height:1.25;margin:0}
   .pp-close{flex:none;min-height:44px;border:1.5px solid var(--panel-border);background:var(--chip);color:var(--chip-ink);border-radius:999px;padding:8px 16px;font-size:14px;font-weight:700}
@@ -270,7 +270,7 @@
 
 <button type="button" id="routeBanner" hidden>全行程ルートを表示中（大阪上本町 → 現在地）<span class="rb-off">✕ 終了</span></button>
 
-<div id="photoPanel" hidden>
+<div id="albumPanel" hidden>
   <div class="pp-head">
     <p class="pp-title">まるの旅の写真</p>
     <button type="button" class="pp-close" id="albumCloseBtn">閉じる</button>
@@ -630,8 +630,8 @@ function openLb(i){
 $("lbClose").onclick = () => $("photoLb").hidden = true;
 $("lbPrev").onclick = () => openLb((lbIdx - 1 + albumPhotos.length) % albumPhotos.length);
 $("lbNext").onclick = () => openLb((lbIdx + 1) % albumPhotos.length);
-$("albumOpenBtn").onclick = () => { $("photoPanel").hidden = false; };
-$("albumCloseBtn").onclick = () => { $("photoPanel").hidden = true; };
+$("albumOpenBtn").onclick = () => { $("albumPanel").hidden = false; };
+$("albumCloseBtn").onclick = () => { $("albumPanel").hidden = true; };
 $("cardToggle").onclick = () => {
   const c = $("card");
   const compact = c.classList.toggle("compact");
