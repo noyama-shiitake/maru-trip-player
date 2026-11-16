@@ -271,7 +271,11 @@ function selectDay(idx, fit=true){
     stopMarkers.push(m);
   });
   if (!pin) pin = L.marker(latlngs[0], {icon: maruIcon, zIndexOffset: 1000}).addTo(map);
-  if (fit) map.fitBounds(routeLine.getBounds().pad(0.08));
+  if (fit){
+    const b = routeLine.getBounds().pad(0.08);
+    map.invalidateSize();
+    setTimeout(() => { map.invalidateSize(); map.fitBounds(b); }, 60);
+  }
   render();
 }
 
