@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>まるの旅 リプレイ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+  html,body{margin:0;padding:0;height:100%;font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;background:#f7f4ec;color:#333}
+  #app{display:flex;flex-direction:column;height:100dvh}
+  header{padding:8px 12px;background:#fff8ec;border-bottom:1px solid #e5d9c3}
+  header h1{font-size:16px;margin:0 0 2px}
+  header .quest{font-size:12px;color:#777}
+  #days{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:#fff;border-bottom:1px solid #eee}
+  #days button{flex:0 0 auto;border:1px solid #d8cdb4;background:#fffdf6;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+  #days button.active{background:#f0b429;border-color:#f0b429;color:#fff;font-weight:700}
+  #days button .planned{font-size:10px;color:#b3541e;margin-left:4px}
+  #days button.active .planned{color:#fff}
+  #map{flex:1;min-height:200px}
+  #panel{background:#fff;border-top:1px solid #e5d9c3;padding:10px 12px;max-height:46dvh;overflow-y:auto}
+  #daytitle{font-size:15px;font-weight:700;margin:0 0 2px}
+  #route{font-size:11px;color:#888;margin:0 0 6px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .chip{font-size:12px;background:#f3ecdc;border-radius:6px;padding:4px 8px}
+  .chip.gourmet{background:#e8f0e4}
+  #account{font-size:12px;color:#555;margin:4px 0}
+  #controls{display:flex;align-items:center;gap:8px;margin:10px 0 6px}
+  #play{width:48px;height:40px;font-size:18px;border:none;border-radius:8px;background:#f0b429;color:#fff;cursor:pointer}
+  #clock{font-size:18px;font-weight:700;min-width:64px;text-align:center}
+  #seek{flex:1}
+  #speed{height:40px;border-radius:8px;border:1px solid #d8cdb4;background:#fffdf6}
+  #caption{font-size:14px;line-height:1.6;background:#fffaf0;border:1px solid #eee0c3;border-radius:8px;padding:8px 10px;min-height:44px}
+  #next{font-size:12px;color:#888;margin-top:4px}
+  #photos{display:flex;gap:8px;overflow-x:auto;padding:8px 0 2px}
+  #photos figure{margin:0;flex:0 0 auto;width:104px;cursor:pointer}
+  #photos img{width:104px;height:78px;object-fit:cover;border-radius:8px;display:block}
+  #photos figcaption{font-size:11px;color:#666;text-align:center;margin-top:2px}
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:1000}
+  #overlay img{max-width:94vw;max-height:88dvh;border-radius:10px}
+  #overlay .cap{position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:14px}
+  #loading{padding:24px;text-align:center;color:#888}
+  .maru-pin{font-size:26px;line-height:1;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🐾 まるの旅 リプレイ</h1>
+    <div class="quest" id="quest">読み込み中…</div>
+  </header>
+  <nav id="days"></nav>
+  <div id="map"></div>
+  <section id="panel">
+    <div id="loading">セーブデータを読み込んでいます…</div>
+    <div id="dayview" style="display:none">
+      <p id="daytitle"></p>
+      <p id="route"></p>
+      <div class="chips" id="chips"></div>
+      <p id="account"></p>
+      <div id="controls">
+        <button id="play" title="再生／停止">▶</button>
+        <div id="clock">--:--</div>
+        <input type="range" id="seek" min="0" max="100" step="0.1" value="0">
+        <select id="speed">
+          <option value="60">×60</option>
+          <option value="300" selected>×300</option>
+          <option value="900">×900</option>
+          <option value="1">×1</option>
+        </select>
+      </div>
+      <div id="caption"></div>
+      <div id="next"></div>
+      <div id="photos"></div>
+    </div>
+  </section>
+</div>
+<div id="overlay"><img id="overlay-img" alt=""><div class="cap" id="overlay-cap"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const SAVE_URL = "https://gist.githubusercontent.com/noyama-shiitake/66671c83ac1baf15406187c990cc1917/raw/maru-trip-save.json";
+const PHOTO_BASE = "photos/";
+
+const map = L.map("map", {zoomControl:true}).setView([34.68, 135.52], 7);
+L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+  attribution: "地図：地理院タイル（国土地理院）", maxZoom: 18
+}).addTo(map);
+
+let SAVE = null, day = null, elapsed = 0, playing = false, lastTs = null;
+let routeLine = null, doneLine = null, pin = null, stopMarkers = [];
+
+const $ = id => document.getElementById(id);
+const maruIcon = L.divIcon({className:"", html:'<div class="maru-pin">🐾</div>', iconSize:[30,30], iconAnchor:[15,15]});
+
+function hav(a, b){
+  const R = 6371, dLa = (b.lat-a.lat)*Math.PI/180, dLo = (b.lng-a.lng)*Math.PI/180;
+  const s = Math.sin(dLa/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+
+// Fill in effective atMin for stops that lack one, by distance between timed anchors.
+function prepare(d){
+  const st = d.stops;
+  st.forEach(s => s._t = (s.atMin === null || s.atMin === undefined) ? null : s.atMin);
+  if (st.length && st[0]._t === null) st[0]._t = 0;
+  let anchors = st.map((s,i)=>s._t===null?null:i).filter(x=>x!==null);
+  for (let k = 0; k + 1 < anchors.length; k++){
+    const i = anchors[k], j = anchors[k+1];
+    let total = 0; const seg = [];
+    for (let m = i; m < j; m++){ const dd = hav(st[m], st[m+1]); seg.push(dd); total += dd; }
+    let acc = 0;
+    for (let m = i + 1; m < j; m++){
+      acc += seg[m-1-i+0] || 0;
+      // distance from i to m:
+      let dm = 0; for (let q = i; q < m; q++) dm += seg[q-i];
+      st[m]._t = total > 0 ? st[i]._t + (st[j]._t - st[i]._t) * (dm/total) : st[i]._t + (st[j]._t-st[i]._t)*((m-i)/(j-i));
+    }
+  }
+  if (anchors.length){
+    const last = anchors[anchors.length-1];
+    if (last < st.length - 1){
+      // pace from the previous segment (minutes per km), fallback: spread to totalMinutes
+      let pace = null;
+      if (anchors.length >= 2){
+        const p = anchors[anchors.length-2];
+        let dist = 0; for (let q = p; q < last; q++) dist += hav(st[q], st[q+1]);
+        if (dist > 0) pace = (st[last]._t - st[p]._t) / dist;
+      }
+      let acc = st[last]._t;
+      for (let m = last + 1; m < st.length; m++){
+        const dd = hav(st[m-1], st[m]);
+        acc += pace !== null ? dd * pace : (d.totalMinutes - st[last]._t) / (st.length - last);
+        st[m]._t = Math.min(acc, d.totalMinutes);
+      }
+    }
+  } else {
+    st.forEach((s,i)=> s._t = d.totalMinutes * (st.length>1 ? i/(st.length-1) : 0));
+  }
+  return st;
+}
+
+function posAt(st, t){
+  if (t <= st[0]._t) return [st[0].lat, st[0].lng];
+  for (let i = 0; i + 1 < st.length; i++){
+    if (t <= st[i+1]._t){
+      const span = st[i+1]._t - st[i]._t;
+      const f = span > 0 ? (t - st[i]._t) / span : 0;
+      return [st[i].lat + (st[i+1].lat - st[i].lat)*f, st[i].lng + (st[i+1].lng - st[i].lng)*f];
+    }
+  }
+  const l = st[st.length-1]; return [l.lat, l.lng];
+}
+
+function fmtClock(d, t){
+  const [h, m] = d.startTime.split(":").map(Number);
+  const total = h*60 + m + Math.floor(t);
+  return String(Math.floor(total/60)%24).padStart(2,"0") + ":" + String(total%60).padStart(2,"0");
+}
+const yen = n => n === null || n === undefined ? "—" : "¥" + n.toLocaleString("ja-JP");
+
+function render(){
+  if (!day) return;
+  const st = day.stops;
+  const p = posAt(st, elapsed);
+  pin.setLatLng(p);
+  const upto = st.filter(s => s._t <= elapsed).map(s => [s.lat, s.lng]);
+  upto.push(p);
+  doneLine.setLatLngs(upto);
+  $("clock").textContent = fmtClock(day, elapsed);
+  $("seek").value = elapsed;
+  let cur = st[0];
+  for (const s of st) if (s._t <= elapsed) cur = s;
+  $("caption").textContent = cur.note || (cur.label ? cur.name + "（" + cur.label + "）" : cur.name);
+  const nx = st.find(s => s.stop && s._t > elapsed);
+  $("next").textContent = nx ? ("つぎ： " + nx.name + (nx.time ? " " + nx.time : "")) : "この日の旅はおわりです";
+}
+
+function selectDay(idx, fit=true){
+  day = SAVE.days[idx];
+  day.stops = prepare(day);
+  elapsed = 0; playing = false; lastTs = null;
+  $("play").textContent = "▶";
+  document.querySelectorAll("#days button").forEach((b,i)=>b.classList.toggle("active", i===idx));
+  $("loading").style.display = "none";
+  $("dayview").style.display = "block";
+  $("daytitle").textContent = day.date + "　" + day.title + (day.status === "planned" ? "（予定）" : "");
+  $("route").textContent = day.routeSummary || "";
+  $("chips").innerHTML = "";
+  (day.prefectures||[]).forEach(pf => {
+    const c = document.createElement("span");
+    c.className = "chip" + (pf.result === "gourmet-only" ? " gourmet" : "");
+    c.textContent = pf.result === "goods"
+      ? ("#" + pf.order + " " + pf.name + "： " + (pf.chiikawa || ""))
+      : ("#" + pf.order + " " + pf.name + "： グルメのみ（" + (pf.gourmet ? pf.gourmet.dish : "") + "）");
+    $("chips").appendChild(c);
+  });
+  const a = day.account || {};
+  $("account").textContent = "運賃 " + yen(a.fare) + " ＋ 宿泊 " + yen(a.lodging) + (a.lodgingEstimate ? "（目安）" : "") +
+    " ＝ " + yen(a.total) + "　／　宿： " + (day.stay ? day.stay.name : "—");
+  $("seek").max = day.totalMinutes;
+  $("photos").innerHTML = "";
+  (day.photos||[]).forEach(ph => {
+    const fig = document.createElement("figure");
+    const img = document.createElement("img");
+    img.src = PHOTO_BASE + ph.file; img.alt = ph.place; img.loading = "lazy";
+    const cap = document.createElement("figcaption"); cap.textContent = ph.place;
+    fig.appendChild(img); fig.appendChild(cap);
+    fig.onclick = () => {
+      $("overlay-img").src = PHOTO_BASE + ph.file;
+      $("overlay-cap").textContent = ph.place + "（" + ph.prefecture + "）";
+      $("overlay").style.display = "flex";
+      const target = day.stops.find(s => s.stop && (s.name.includes(ph.place) || ph.place.includes(s.name)));
+      if (target){ elapsed = target._t; playing = false; $("play").textContent = "▶"; render(); }
+    };
+    $("photos").appendChild(fig);
+  });
+  if (routeLine) routeLine.remove();
+  if (doneLine) doneLine.remove();
+  stopMarkers.forEach(m=>m.remove()); stopMarkers = [];
+  const latlngs = day.stops.map(s => [s.lat, s.lng]);
+  routeLine = L.polyline(latlngs, {color:"#c9b98a", weight:4, opacity:.8}).addTo(map);
+  doneLine = L.polyline([], {color:"#e07b39", weight:5}).addTo(map);
+  day.stops.filter(s=>s.stop).forEach(s => {
+    const m = L.circleMarker([s.lat, s.lng], {radius:5, color:"#b3541e", fillColor:"#fff", fillOpacity:1, weight:2})
+      .addTo(map).bindTooltip(s.name + (s.time ? " " + s.time : ""));
+    m.on("click", () => { elapsed = s._t; playing = false; $("play").textContent = "▶"; render(); });
+    stopMarkers.push(m);
+  });
+  if (!pin) pin = L.marker(latlngs[0], {icon: maruIcon, zIndexOffset: 1000}).addTo(map);
+  if (fit) map.fitBounds(routeLine.getBounds().pad(0.08));
+  render();
+}
+
+function tick(ts){
+  if (!playing) return;
+  if (lastTs === null) lastTs = ts;
+  const dtMin = (ts - lastTs) / 1000 / 60 * Number($("speed").value);
+  lastTs = ts;
+  elapsed += dtMin;
+  if (elapsed >= day.totalMinutes){ elapsed = day.totalMinutes; playing = false; $("play").textContent = "▶"; }
+  render();
+  if (playing) requestAnimationFrame(tick);
+}
+
+$("play").onclick = () => {
+  if (!day) return;
+  if (!playing && elapsed >= day.totalMinutes) elapsed = 0;
+  playing = !playing; lastTs = null;
+  $("play").textContent = playing ? "⏸" : "▶";
+  if (playing) requestAnimationFrame(tick);
+};
+$("seek").oninput = e => { elapsed = Number(e.target.value); playing = false; $("play").textContent = "▶"; render(); };
+$("overlay").onclick = () => $("overlay").style.display = "none";
+
+fetch(SAVE_URL).then(r => r.json()).then(data => {
+  SAVE = data;
+  const q = data.quest || {};
+  $("quest").textContent = "全国制覇 " + (q.collected ?? "?") + "/" + (q.totalPrefectures ?? 47) +
+    "県（グッズ " + (q.goodsCollected ?? "?") + "県・グルメのみ " + (q.gourmetOnly ?? "?") + "県）　更新：" +
+    (data.updatedAt || "").slice(0,10);
+  const nav = $("days");
+  data.days.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.innerHTML = d.date.slice(5).replace("-", "/") + " " + (d.prefectures && d.prefectures[0] ? d.prefectures[0].name : "") +
+      (d.status === "planned" ? '<span class="planned">予定</span>' : "");
+    b.onclick = () => selectDay(i);
+    nav.appendChild(b);
+  });
+  selectDay(data.days.length - 1);
+}).catch(e => { $("loading").textContent = "セーブデータを読み込めませんでした：" + e; });
+</script>
+</body>
+</html>
