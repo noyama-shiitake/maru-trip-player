@@ -281,7 +281,7 @@
 .day-label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
 #seek{width:100%;margin:8px 0 2px;accent-color:#9e2b25}
 .live-note{display:inline-block;padding:3px 10px;border-radius:999px;background:#fdeceb;color:#9e2b25;font-weight:700;font-size:12.5px}
-.compact-toggle{display:block;width:100%;margin-top:8px;padding:7px 10px;border:1.5px solid var(--panel-border);border-radius:11px;background:#fff;color:var(--muted);font-size:12.5px;cursor:pointer}
+#card.compact .card-body{display:none}
 .sta .lb{background:rgba(255,255,255,.92);border:1px solid #dde3e8;border-radius:999px;padding:1px 7px;font-size:11px;font-weight:600;color:#1d2530;white-space:nowrap;margin-left:5px}
 #routeBanner{max-width:94vw;box-sizing:border-box;display:flex;align-items:center;gap:10px}
 #routeBannerText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -313,7 +313,7 @@
       <div class="card-sub" id="cardSub">位置情報を共有中</div>
     </div>
     <div class="pill" id="cardPill"><span class="dotlive"></span><span id="cardStatus">読み込み中</span></div>
-    <button type="button" class="card-toggle" id="reloadBtn" title="セーブデータを再読み込み">🔄 リロード</button>
+    <button type="button" class="card-toggle" id="cardToggle" aria-expanded="true">カードを縮める</button>
   </div>
   <div class="card-body" id="cardBody">
     <div class="card-next" id="cardNext">地図を準備しています…</div>
@@ -328,7 +328,6 @@
       </div>
     </div>
     <button type="button" class="album-btn" id="albumOpenBtn" aria-haspopup="dialog">📷 まるの旅の写真</button>
-    <button type="button" class="compact-toggle" id="cardToggle" aria-expanded="true">カードを縮める</button>
   </div>
 </header>
 
@@ -359,6 +358,7 @@
     <div class="panel" id="tourPanel"></div>
     <div class="footrow">
       <p class="fineprint" id="mapCredit">地図：地理院タイル（標準地図／全国最新写真）・セーブデータ：GitHub（まるの旅 セーブデータ v2）</p>
+      <button class="linkbtn" id="sheetReload">再読み込み</button>
     </div>
   </div>
 </section>
@@ -774,11 +774,10 @@ $("basePhoto").addEventListener("click", function(){
   this.setAttribute("aria-pressed","true"); $("baseStd").setAttribute("aria-pressed","false");
 });
 $("cardToggle").addEventListener("click", function(){
-  var b = $("cardBody"), open = b.style.display!=="none";
-  b.style.display = open? "none":"";
-  document.getElementById("card").classList.toggle("compact", open);
-  this.textContent = open? "カードを開く" : "カードを縮める";
-  this.setAttribute("aria-expanded", open? "false":"true");
+  var c = !$("card").classList.contains("compact");
+  $("card").classList.toggle("compact", c);
+  this.setAttribute("aria-expanded", c? "false":"true");
+  this.textContent = c? "カードを開く" : "カードを縮める";
 });
 $("sheetToggle").addEventListener("click", function(){
   var b = $("sheetBody"), open = b.style.display!=="none";
@@ -787,7 +786,7 @@ $("sheetToggle").addEventListener("click", function(){
   this.textContent = open? "シートを開く" : "シートを閉じる";
   this.setAttribute("aria-expanded", open? "false":"true");
 });
-$("reloadBtn").addEventListener("click", function(){ loadData(true); });
+$("sheetReload").addEventListener("click", function(){ loadData(true); });
 
 /* Street View: in-page panel, position snapped to the road via OSRM */
 var svMode = "here";
