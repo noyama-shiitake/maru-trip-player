@@ -63,7 +63,7 @@
   .pp-progress-head b{font-size:14px}
   .pp-progress-head small{color:var(--muted);font-size:12.5px}
   .pp-bar{height:9px;border-radius:999px;background:var(--track);overflow:hidden;margin-top:8px}
-  .pp-bar i{display:block;height:100%;width:25.5%;background:var(--accent-walk);border-radius:999px}
+  .pp-bar i{display:block;height:100%;width:29.8%;background:var(--accent-walk);border-radius:999px}
   .pp-pref-list{margin:8px 0 0;font-size:12.5px;color:var(--muted);line-height:1.6}
   .pp-day{margin-top:26px}
   .pp-day-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
@@ -298,6 +298,8 @@ html,body{background:#0D4F72}#map{background:#0D4F72}.leaflet-container{backgrou
 .lb-close{top:14px;right:14px}
 .lb-prev{left:10px;top:50%}
 .lb-next{right:10px;top:50%}
+.card-links{display:flex;gap:8px}
+.card-links .album-btn{flex:1;width:auto;min-width:0}
 </style>
 
 </head>
@@ -328,7 +330,10 @@ html,body{background:#0D4F72}#map{background:#0D4F72}.leaflet-container{backgrou
         <button type="button" id="basePhoto" aria-pressed="false">航空写真</button>
       </div>
     </div>
-    <button type="button" class="btn album-btn" id="albumOpenBtn" aria-haspopup="dialog">📷 まるの旅の写真</button>
+    <div class="card-links">
+      <button type="button" class="btn album-btn" id="albumOpenBtn" aria-haspopup="dialog">📷 まるの旅の写真</button>
+      <a class="btn album-btn" id="journalBtn" href="https://noyama-shiitake.github.io/maru-journey/journal.html">📖 まるの日記</a>
+    </div>
   </div>
 </header>
 
@@ -840,6 +845,8 @@ function loadData(keep){
     sel.value = (cur && j.days.some(function(d){ return d.date===cur; }))? cur : def;
     buildTourPanel();
     buildAlbum();
+    var jb = $("journalBtn");
+    if(jb){ var doneN = j.days.filter(function(d){ return d.status==="completed"; }).length; if(doneN>0) jb.href = "https://noyama-shiitake.github.io/maru-journey/journal.html#day"+doneN; }
     selectDay(sel.value, keep);
   }).catch(function(e){
     $("cardNext").textContent = "セーブデータを読み込めませんでした";
